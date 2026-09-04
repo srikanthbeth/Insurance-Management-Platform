@@ -1,244 +1,171 @@
-from sqlalchemy import asc, desc
-from sqlalchemy.orm import Session
 
-from models.plan import InsurancePlan
-from models.policy import Policy
+from datetime import date
+from decimal import Decimal
+from typing import Optional
+
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
-# ============================================================
-# CREATE
-# ============================================================
-
-def create_policy(
-    db: Session,
-    policy: Policy,
-):
-    db.add(policy)
-    db.commit()
-    db.refresh(policy)
-
-    return policy
+VALID_POLICY_STATUSES = {
+    "Pending",
+    "Active",
+    "Expired",
+    "Cancelled",
+    "Suspended",
+}
 
 
 # ============================================================
-# GET BY ID
+# CREATE POLICY
 # ============================================================
 
-def get_policy_by_id(
-    db: Session,
-    policy_id: int,
-):
-    return (
-        db.query(Policy)
-        .filter(Policy.id == policy_id)
-        .first()
+class PolicyCreate(BaseModel):
+    policy_number: str = Field(
+        ...,
+        min_length=3,
+        max_length=50,
     )
 
-
-# ============================================================
-# GET BY POLICY NUMBER
-# ============================================================
-
-def get_policy_by_number(
-    db: Session,
-    policy_number: str,
-):
-    return (
-        db.query(Policy)
-        .filter(
-            Policy.policy_number == policy_number
-        )
-        .first()
+    customer_id: int = Field(
+        ...,
+        gt=0,
     )
 
-
-# ============================================================
-# GET ALL
-# ============================================================
-
-def get_all_policies(
-    db: Session,
-):
-    return (
-        db.query(Policy)
-        .order_by(Policy.id.desc())
-        .all()
+    plan_id: int = Field(
+        ...,
+        gt=0,
     )
 
-
-# ============================================================
-# UPDATE
-# ============================================================
-
-def update_policy(
-    db: Session,
-    policy: Policy,
-    update_data: dict,
-):
-    for field, value in update_data.items():
-        setattr(policy, field, value)
-
-    db.commit()
-    db.refresh(policy)
-
-    return policy
-
-
-# ============================================================
-# DELETE
-# ============================================================
-
-def delete_policy(
-    db: Session,
-    policy: Policy,
-):
-    db.delete(policy)
-    db.commit()
-
-
-# ============================================================
-# SEARCH / FILTER / PAGINATION
-# ============================================================
-
-def search_policies(
-    db: Session,
-    search=None,
-    policy_status=None,
-    plan_type=None,
-    customer_id=None,
-    expiry_from=None,
-    expiry_to=None,
-    page: int = 1,
-    limit: int = 10,
-    sort_by: str = "id",
-    sort_order: str = "desc",
-):
-    query = (
-        db.query(Policy)
-        .join(
-            InsurancePlan,
-            Policy.plan_id == InsurancePlan.id,
-        )
+    agent_id: int = Field(
+        ...,
+        gt=0,
     )
+
+    start_date: date
+
+    end_date: date
+
+    coverage_amount: Decimal = Field(
+        ...,
+        gt=0,
+    )
+
+    premium_amount: Decimal = Field(
+        ...,
+        gt=0,
+    )
+
+    policy_status: str = "Pending"
 
     # --------------------------------------------------------
-    # SEARCH BY POLICY NUMBER
+    # Policy Number Validation
     # --------------------------------------------------------
 
-    if search:
-        query = query.filter(
-            Policy.policy_number.ilike(
-                f"%{search.strip()}%"
+    @field_validator("policy_number")
+    @classmethod
+    def validate_policy_number(cls, value):
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Policy number cannot be empty"
             )
-        )
+
+        return value
 
     # --------------------------------------------------------
-    # FILTER: POLICY STATUS
+    # Policy Status Validation
     # --------------------------------------------------------
 
-    if policy_status is not None:
-        query = query.filter(
-            Policy.policy_status == policy_status
-        )
+    @field_validator("policy_status")
+    @classmethod
+    def validate_policy_status(cls, value):
+        if value not in VALID_POLICY_STATUSES:
+            raise ValueError(
+                "Invalid policy status"
+            )
 
-    # --------------------------------------------------------
-    # FILTER: PLAN TYPE
-    # --------------------------------------------------------
+        return value
 
-    if plan_type is not None:
-        query = query.filter(
-            InsurancePlan.plan_type == plan_type
-        )
 
-    # --------------------------------------------------------
-    # FILTER: CUSTOMER
-    # --------------------------------------------------------
+# ============================================================
+# UPDATE POLICY
+# ============================================================
 
-    if customer_id is not None:
-        query = query.filter(
-            Policy.customer_id == customer_id
-        )
+class PolicyUpdate(BaseModel):
+    end_date: Optional[date] = None
 
-    # --------------------------------------------------------
-    # FILTER: EXPIRY DATE FROM
-    # --------------------------------------------------------
-
-    if expiry_from is not None:
-        query = query.filter(
-            Policy.end_date >= expiry_from
-        )
-
-    # --------------------------------------------------------
-    # FILTER: EXPIRY DATE TO
-    # --------------------------------------------------------
-
-    if expiry_to is not None:
-        query = query.filter(
-            Policy.end_date <= expiry_to
-        )
-
-    # --------------------------------------------------------
-    # VALIDATE SORT ORDER
-    # --------------------------------------------------------
-
-    sort_order = sort_order.lower()
-
-    if sort_order not in {"asc", "desc"}:
-        raise ValueError(
-            "sort_order must be either 'asc' or 'desc'"
-        )
-
-    # --------------------------------------------------------
-    # SORT COLUMNS
-    # --------------------------------------------------------
-
-    sort_columns = {
-        "id": Policy.id,
-        "policy_number": Policy.policy_number,
-        "start_date": Policy.start_date,
-        "end_date": Policy.end_date,
-        "premium_amount": Policy.premium_amount,
-        "coverage_amount": Policy.coverage_amount,
-        "policy_status": Policy.policy_status,
-    }
-
-    if sort_by not in sort_columns:
-        raise ValueError(
-            "Invalid sort_by field"
-        )
-
-    sort_column = sort_columns[sort_by]
-
-    # --------------------------------------------------------
-    # SORT
-    # --------------------------------------------------------
-
-    if sort_order == "desc":
-        query = query.order_by(
-            desc(sort_column)
-        )
-    else:
-        query = query.order_by(
-            asc(sort_column)
-        )
-
-    # --------------------------------------------------------
-    # TOTAL BEFORE PAGINATION
-    # --------------------------------------------------------
-
-    total = query.count()
-
-    # --------------------------------------------------------
-    # PAGINATION
-    # --------------------------------------------------------
-
-    offset = (page - 1) * limit
-
-    policies = (
-        query
-        .offset(offset)
-        .limit(limit)
-        .all()
+    coverage_amount: Optional[Decimal] = Field(
+        default=None,
+        gt=0,
     )
 
-    return policies, total
+    premium_amount: Optional[Decimal] = Field(
+        default=None,
+        gt=0,
+    )
+
+    policy_status: Optional[str] = None
+
+    # --------------------------------------------------------
+    # Policy Status Validation
+    # --------------------------------------------------------
+
+    @field_validator("policy_status")
+    @classmethod
+    def validate_policy_status(cls, value):
+        if (
+            value is not None
+            and value not in VALID_POLICY_STATUSES
+        ):
+            raise ValueError(
+                "Invalid policy status"
+            )
+
+        return value
+
+
+# ============================================================
+# POLICY RESPONSE
+# ============================================================
+
+class PolicyResponse(BaseModel):
+    id: int
+
+    policy_number: str
+
+    customer_id: int
+    plan_id: int
+    agent_id: int
+
+    start_date: date
+    end_date: date
+
+    # Convert PostgreSQL Decimal response to JSON number
+    coverage_amount: float
+    premium_amount: float
+
+    policy_status: str
+
+    model_config = ConfigDict(
+        from_attributes=True
+    )
+
+
+# ============================================================
+# POLICY LIST RESPONSE
+# ============================================================
+
+class PolicyListResponse(BaseModel):
+    success: bool
+
+    message: str
+
+    data: list[PolicyResponse]
+
+    total: int
+
+    page: int
+
+    limit: int
+

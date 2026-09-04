@@ -1,83 +1,50 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import (
-    DateTime,
-    ForeignKey,
-    Integer,
-    Numeric,
-    String,
-    UniqueConstraint,
-)
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from database import Base
+from pydantic import BaseModel, ConfigDict, Field
 
 
-class Settlement(Base):
-    __tablename__ = "settlements"
+VALID_SETTLEMENT_STATUSES = {
+    "Pending",
+    "Processing",
+    "Completed",
+    "Failed",
+}
 
-    __table_args__ = (
-        UniqueConstraint(
-            "claim_id",
-            name="uq_settlement_claim_id",
-        ),
-        UniqueConstraint(
-            "payment_reference",
-            name="uq_settlement_payment_reference",
-        ),
+
+class SettlementCreate(BaseModel):
+    approved_amount: Decimal = Field(
+        ...,
+        gt=0,
     )
 
-    id: Mapped[int] = mapped_column(
-        Integer,
-        primary_key=True,
-        index=True,
+    payment_reference: str = Field(
+        ...,
+        min_length=3,
+        max_length=100,
     )
 
-    claim_id: Mapped[int] = mapped_column(
-        ForeignKey("claims.id"),
-        nullable=False,
-        index=True,
-    )
-
-    approved_amount: Mapped[Decimal] = mapped_column(
-        Numeric(15, 2),
-        nullable=False,
-    )
-
-    settlement_date: Mapped[datetime] = mapped_column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-    )
-
-    payment_reference: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
-        unique=True,
-        index=True,
-    )
-
-    settlement_status: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
+    settlement_status: str = Field(
         default="Pending",
     )
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
+
+class SettlementResponse(BaseModel):
+    id: int
+    claim_id: int
+    approved_amount: Decimal
+    settlement_date: datetime
+    payment_reference: str
+    settlement_status: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True,
     )
 
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-    )
 
-    claim = relationship(
-        "Claim",
-        back_populates="settlement",
-    )
+class SettlementListResponse(BaseModel):
+    success: bool
+    message: str
+    data: list[SettlementResponse]

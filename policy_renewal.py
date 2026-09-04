@@ -1,105 +1,51 @@
 from datetime import date, datetime
 
-from sqlalchemy import (
-    Date,
-    DateTime,
-    ForeignKey,
-    Integer,
-    String,
-    UniqueConstraint,
-)
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from database import Base
+from pydantic import BaseModel, ConfigDict
 
 
-class PolicyRenewal(Base):
-    __tablename__ = "policy_renewals"
+class PolicyRenewalResponse(BaseModel):
+    id: int
 
-    __table_args__ = (
-        UniqueConstraint(
-            "previous_policy_id",
-            name="uq_policy_renewal_previous_policy",
-        ),
-        UniqueConstraint(
-            "new_policy_id",
-            name="uq_policy_renewal_new_policy",
-        ),
+    previous_policy_id: int
+    new_policy_id: int
+
+    previous_start_date: date
+    previous_end_date: date
+
+    new_start_date: date
+    new_end_date: date
+
+    renewal_date: datetime
+    renewal_status: str
+
+    created_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True,
     )
 
-    id: Mapped[int] = mapped_column(
-        Integer,
-        primary_key=True,
-        index=True,
+
+class ExpiringPolicyResponse(BaseModel):
+    id: int
+    policy_number: str
+
+    customer_id: int
+    plan_id: int
+    agent_id: int
+
+    start_date: date
+    end_date: date
+
+    coverage_amount: float
+    premium_amount: float
+    policy_status: str
+
+    model_config = ConfigDict(
+        from_attributes=True,
     )
 
-    previous_policy_id: Mapped[int] = mapped_column(
-        ForeignKey("policies.id"),
-        nullable=False,
-        index=True,
-    )
 
-    new_policy_id: Mapped[int] = mapped_column(
-        ForeignKey("policies.id"),
-        nullable=False,
-        index=True,
-    )
-
-    previous_start_date: Mapped[date] = mapped_column(
-        Date,
-        nullable=False,
-    )
-
-    previous_end_date: Mapped[date] = mapped_column(
-        Date,
-        nullable=False,
-    )
-
-    new_start_date: Mapped[date] = mapped_column(
-        Date,
-        nullable=False,
-    )
-
-    new_end_date: Mapped[date] = mapped_column(
-        Date,
-        nullable=False,
-    )
-
-    renewal_date: Mapped[datetime] = mapped_column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-    )
-
-    renewal_status: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        default="Completed",
-    )
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-    )
-
-    # ---------------------------------------------------------
-    # Previous / Old Policy
-    # ---------------------------------------------------------
-
-    previous_policy = relationship(
-        "Policy",
-        foreign_keys=[previous_policy_id],
-        back_populates="previous_renewals",
-    )
-
-    # ---------------------------------------------------------
-    # New / Renewed Policy
-    # ---------------------------------------------------------
-
-    new_policy = relationship(
-        "Policy",
-        foreign_keys=[new_policy_id],
-        back_populates="renewal_record",
-        uselist=False,
-    )
+class ExpiringPolicyListResponse(BaseModel):
+    success: bool
+    message: str
+    data: list[ExpiringPolicyResponse]

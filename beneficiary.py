@@ -1,50 +1,134 @@
-from sqlalchemy import Column, Integer, String, Numeric, ForeignKey
-from sqlalchemy.orm import relationship as sa_relationship
+from decimal import Decimal
+from typing import Optional
 
-from database import Base
+from pydantic import BaseModel, Field, field_validator
 
 
-class Beneficiary(Base):
-    __tablename__ = "beneficiaries"
-
-    id = Column(
-        Integer,
-        primary_key=True,
-        index=True,
+class BeneficiaryCreate(BaseModel):
+    name: str = Field(
+        ...,
+        min_length=2,
+        max_length=100,
     )
 
-    policy_id = Column(
-        Integer,
-        ForeignKey("policies.id"),
-        nullable=False,
+    relationship: str = Field(
+        ...,
+        min_length=2,
+        max_length=50,
     )
 
-    name = Column(
-        String(100),
-        nullable=False,
+    percentage: Decimal = Field(
+        ...,
+        gt=0,
+        le=100,
     )
 
-    relationship = Column(
-        String(50),
-        nullable=False,
+    phone: str = Field(
+        ...,
+        min_length=10,
+        max_length=20,
     )
 
-    percentage = Column(
-        Numeric(5, 2),
-        nullable=False,
+    identification_number: str = Field(
+        ...,
+        min_length=3,
+        max_length=50,
     )
 
-    phone = Column(
-        String(20),
-        nullable=False,
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, value):
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Beneficiary name cannot be empty"
+            )
+
+        return value
+
+    @field_validator("relationship")
+    @classmethod
+    def validate_relationship(cls, value):
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Relationship cannot be empty"
+            )
+
+        return value
+
+    @field_validator("phone")
+    @classmethod
+    def validate_phone(cls, value):
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Phone cannot be empty"
+            )
+
+        if not value.isdigit():
+            raise ValueError(
+                "Phone must contain only digits"
+            )
+
+        return value
+
+    @field_validator("identification_number")
+    @classmethod
+    def validate_identification_number(cls, value):
+        value = value.strip()
+
+        if not value:
+            raise ValueError(
+                "Identification number cannot be empty"
+            )
+
+        return value
+
+
+class BeneficiaryUpdate(BaseModel):
+    name: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=100,
     )
 
-    identification_number = Column(
-        String(50),
-        nullable=False,
+    relationship: Optional[str] = Field(
+        default=None,
+        min_length=2,
+        max_length=50,
     )
 
-    policy = sa_relationship(
-        "Policy",
-        back_populates="beneficiaries",
+    percentage: Optional[Decimal] = Field(
+        default=None,
+        gt=0,
+        le=100,
     )
+
+    phone: Optional[str] = Field(
+        default=None,
+        min_length=10,
+        max_length=20,
+    )
+
+    identification_number: Optional[str] = Field(
+        default=None,
+        min_length=3,
+        max_length=50,
+    )
+
+
+class BeneficiaryResponse(BaseModel):
+    id: int
+    policy_id: int
+    name: str
+    relationship: str
+    percentage: Decimal
+    phone: str
+    identification_number: str
+
+    class Config:
+        from_attributes = True

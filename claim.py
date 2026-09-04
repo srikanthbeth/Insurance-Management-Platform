@@ -1,126 +1,153 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import (
-    Date,
-    DateTime,
-    ForeignKey,
-    Integer,
-    Numeric,
-    String,
-    Text,
-    UniqueConstraint,
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
-from database import Base
 
 
-class Claim(Base):
-    __tablename__ = "claims"
+VALID_CLAIM_STATUSES = {
+    "Submitted",
+    "Under Review",
+    "Documents Required",
+    "Approved",
+    "Rejected",
+    "Settled",
+}
 
-    __table_args__ = (
-        UniqueConstraint(
-            "claim_number",
-            name="uq_claim_claim_number",
-        ),
-        UniqueConstraint(
-            "policy_id",
-            "incident_date",
-            name="uq_claim_policy_incident",
-        ),
+
+VALID_CLAIM_TYPES = {
+    "Health",
+    "Life",
+    "Vehicle",
+    "Property",
+    "Travel",
+    "Other",
+}
+
+
+class ClaimCreate(BaseModel):
+    claim_number: str = Field(
+        ...,
+        min_length=3,
+        max_length=100,
     )
 
-    id: Mapped[int] = mapped_column(
-        Integer,
-        primary_key=True,
-        index=True,
+    policy_id: int = Field(
+        ...,
+        gt=0,
     )
 
-    claim_number: Mapped[str] = mapped_column(
-        String(100),
-        unique=True,
-        nullable=False,
-        index=True,
+    customer_id: int = Field(
+        ...,
+        gt=0,
     )
 
-    policy_id: Mapped[int] = mapped_column(
-        ForeignKey("policies.id"),
-        nullable=False,
-        index=True,
+    claim_type: str
+
+    incident_date: date
+
+    claim_amount: Decimal = Field(
+        ...,
+        gt=0,
     )
 
-    customer_id: Mapped[int] = mapped_column(
-        ForeignKey("customers.id"),
-        nullable=False,
-        index=True,
+    description: str = Field(
+        ...,
+        min_length=5,
+        max_length=2000,
     )
 
-    claim_type: Mapped[str] = mapped_column(
-        String(100),
-        nullable=False,
+    status: str = "Submitted"
+
+    @field_validator("claim_type")
+    @classmethod
+    def validate_claim_type(cls, value):
+        if value not in VALID_CLAIM_TYPES:
+            raise ValueError(
+                "Invalid claim type"
+            )
+
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value):
+        if value not in VALID_CLAIM_STATUSES:
+            raise ValueError(
+                "Invalid claim status"
+            )
+
+        return value
+
+
+class ClaimUpdate(BaseModel):
+    claim_type: str | None = None
+
+    incident_date: date | None = None
+
+    claim_amount: Decimal | None = Field(
+        default=None,
+        gt=0,
     )
 
-    incident_date: Mapped[date] = mapped_column(
-        Date,
-        nullable=False,
+    description: str | None = Field(
+        default=None,
+        min_length=5,
+        max_length=2000,
     )
 
-    claim_amount: Mapped[Decimal] = mapped_column(
-        Numeric(15, 2),
-        nullable=False,
+    status: str | None = None
+
+    @field_validator("claim_type")
+    @classmethod
+    def validate_claim_type(cls, value):
+        if value is not None and value not in VALID_CLAIM_TYPES:
+            raise ValueError(
+                "Invalid claim type"
+            )
+
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value):
+        if value is not None and value not in VALID_CLAIM_STATUSES:
+            raise ValueError(
+                "Invalid claim status"
+            )
+
+        return value
+
+
+class ClaimResponse(BaseModel):
+    id: int
+    claim_number: str
+    policy_id: int
+    customer_id: int
+    claim_type: str
+    incident_date: date
+    claim_amount: Decimal
+    description: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True
     )
 
-    description: Mapped[str] = mapped_column(
-        Text,
-        nullable=False,
-    )
+    # ============================================================
+# CLAIM LIST RESPONSE
+# ============================================================
 
-    status: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        default="Submitted",
-    )
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-    )
-
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
-        nullable=False,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
-    )
-
-    policy = relationship(
-        "Policy",
-        back_populates="claims",
-    )
-
-    customer = relationship(
-        "Customer",
-        back_populates="claims",
-    )
-
-    documents = relationship(
-        "ClaimDocument",
-        back_populates="claim",
-        cascade="all, delete-orphan",
-    )
-
-    assessment = relationship(
-        "ClaimAssessment",
-        back_populates="claim",
-        uselist=False,
-        cascade="all, delete-orphan",
-    )
-
-    settlement = relationship(
-    "Settlement",
-    back_populates="claim",
-    uselist=False,
-    cascade="all, delete-orphan",
-)
+class ClaimListResponse(BaseModel):
+    success: bool
+    message: str
+    data: list[ClaimResponse]
+    total: int
+    page: int
+    limit: int
